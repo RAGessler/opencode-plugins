@@ -1,64 +1,57 @@
-name: Release
+name: Release OpenCode V2 plugin
 
 on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
-    inputs:
-      release_tag:
-        description: "Existing v-prefixed tag to publish"
-        required: true
-        type: string
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
-  publish:
+  release:
     runs-on: ubuntu-latest
-    env:
-      RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          ref: ${{ inputs.release_tag || github.ref }}
-      - uses: actions/setup-python@v5
+          node-version: "26"
+          registry-url: https://registry.npmjs.org
+      - uses: oven-sh/setup-bun@v2
         with:
-          python-version: "3.12"
-      - run: python -m pip install --upgrade build twine
+          bun-version: "1.4.4"
       - name: Validate release tag
         run: |
-          package_version=$(python -c 'import re; from pathlib import Path; print(re.search(r"__version__ = \"([^\"]+)\"", Path("src/opencode_standup/__init__.py").read_text()).group(1))')
-          expected_tag="v${package_version}"
-          test "${RELEASE_TAG}" = "${expected_tag}" || {
-            echo "Release tag ${RELEASE_TAG} does not match package version ${package_version}." >&2
+          package_version=$(node -p "require('./package.json').version")
+          test "v${package_version}" = "${GITHUB_REF_NAME}" || {
+            echo "Release tag ${GITHUB_REF_NAME} does not match package version ${package_version}." >&2
             exit 1
           }
-      - run: python -m build
-      - run: python -m twine check dist/*
-      - run: python scripts/audit_package.py dist/*
-      - name: Store release distributions
-        uses: actions/upload-artifact@v4
+      - run: npm ci --ignore-scripts --registry=https://registry.npmjs.org
+      - run: npm run typecheck
+      - run: npm test
+      - name: Pack npm release
+        run: mkdir -p dist && npm pack --pack-destination dist
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          test -n "${NODE_AUTH_TOKEN}" || {
+            echo "Set the NPM_TOKEN repository secret before publishing a release." >&2
+            exit 1
+          }
+          npm publish dist/*.tgz --access public --provenance --registry=https://registry.npmjs.org
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
         with:
-          name: release-distributions
-          path: dist/*
+          tag_name: ${{ github.ref_name }}
+          release_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          body: |
+            OpenCode V2 TUI cost plugin. Install the npm package in the global OpenCode `cli.json` plugins array as documented in the README.
 
-  github-release:
-    needs: publish
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: release-distributions
-          path: dist
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ inputs.release_tag || github.ref_name }}
-          release_name: ${{ inputs.release_tag || github.ref_name }}
-          files: dist/*
+            The legacy Python TUI is deprecated and OpenCode V1-only. No further Python wheel releases will be published; existing releases remain available.
+          files: dist/*.tgz
           draft: false
           prerelease: false

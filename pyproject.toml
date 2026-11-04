@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "opencode-standup"
 dynamic = ["version"]
-description = "A TUI command center for OpenCode sessions"
+description = "Deprecated OpenCode V1 standalone TUI; use the OpenCode V2 cost plugin"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"

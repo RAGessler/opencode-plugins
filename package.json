@@ -1,0 +1,42 @@
+{
+  "name": "opencode-standup",
+  "version": "1.0.0",
+  "description": "Fork-safe cost widgets for the OpenCode V2 sidebar",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    "./tui": "./plugin/tui.tsx"
+  },
+  "files": [
+    "plugin/tui.tsx", "plugin/widget.tsx", "plugin/costs.ts",
+    "plugin/monitor.ts", "plugin/periods.ts", "README.md", "LICENSE"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test ./plugin",
+    "test:integration": "bun run scripts/verify-isolated.ts",
+    "verify:live": "bun run scripts/verify-v2.ts"
+  },
+  "dependencies": {
+    "@opencode/plugin": "2.2.5"
+  },
+  "peerDependencies": {
+    "@opencode/theme": "2.2.5",
+    "@opentui/core": ">=0.8.0 <0.9.0",
+    "@opentui/solid": ">=0.8.0 <0.9.0",
+    "solid-js": "^1.9.0"
+  },
+  "devDependencies": {
+    "@opencode/client": "2.2.5",
+    "@opencode/theme": "2.2.5",
+    "@opentui/core": "0.8.2",
+    "@opentui/solid": "0.8.2",
+    "@types/bun": "^1.3.0",
+    "solid-js": "^1.9.9",
+    "typescript": "^5.9.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RAGessler/opencode-standup.git"
+  }
+}

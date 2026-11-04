@@ -1,0 +1,26 @@
+name: V2 plugin
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "26"
+          cache: npm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4"
+      - run: npm ci --ignore-scripts --registry=https://registry.npmjs.org
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm pack --dry-run
