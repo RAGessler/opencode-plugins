@@ -37,6 +37,32 @@ Requirements: the [GitHub CLI](https://cli.github.com) (`gh`), logged in with ac
 | `debounceSeconds` | `120` | How long a PR must stay quiet before one batched report is sent. |
 | `fixLowSeverity` | `true` | Fix confirmed, small, safe low-severity findings. Set `false` to skip them. |
 
+## Widget and commands
+
+The plugin adds a **PR Followup** section to the OpenCode sidebar and a status in the home footer. It updates when the plugin changes state, and every 10 seconds.
+
+| Widget | Meaning |
+| --- | --- |
+| `● PR Followup  watching` | On. Watching one or more PRs, nothing to do. |
+| `● PR Followup  working` | On. Findings wait for triage. |
+| `▲ PR Followup  needs you` | A decision waits for your answer. Commits and pushes are paused. |
+| `● PR Followup  error` | A GitHub request failed. The widget shows the reason. |
+| `○ PR Followup  off` | Turned off. |
+| `○ PR Followup  unavailable` | The widget cannot reach the plugin. |
+
+Click the heading to collapse it. Commands:
+
+| Command | Action |
+| --- | --- |
+| `/followup` | Open a menu: turn on, turn off, show status. |
+| `/followup on` / `off` / `toggle` | Turn the plugin on or off. |
+| `/followup status` | Show a status message. |
+| `/followup collapse` / `expand` | Collapse or expand the widget. |
+
+The command palette has **PR Followup: turn on** and **PR Followup: turn off**.
+
+**Off** means: the watcher stops polling, `register` is refused, and no reports arrive. Your choice is saved and survives restarts. While off, an open decision still pauses commits and pushes in its session, so turning the plugin off never releases a pause. The never-force-push and never-merge rules apply only while the plugin is on.
+
 ## How it works
 
 ```text
@@ -67,7 +93,7 @@ These rules do not depend on the agent following instructions:
 
 - **Only your answer resumes work.** The plugin records answers from your real prompts (`D-3 1`). The agent has no tool to record one. Plugin-sent messages are ignored as answers.
 - **Pause on open decisions.** While a decision is open, the session cannot run `git commit` or `git push`.
-- **Never** force-push, merge, mark ready (`gh pr merge`, `gh pr ready`), or skip hooks (`--no-verify`) in a session that owns a PR.
+- **Never** force-push, merge, mark ready (`gh pr merge`, `gh pr ready`), or skip hooks (`--no-verify`) in a session that owns a PR, while the plugin is on.
 - **Decision text must pass an English check.** The plugin refuses text with sentences over 20 words (instructions) or 25 words (descriptions), contractions, Latin abbreviations, or semicolons.
 - **Edited comments reopen.** If a reviewer edits a finding, the old assessment and any open decision are withdrawn.
 - **Comment text is untrusted.** Findings are returned inside `<untrusted-comment>` tags. Wake messages never contain comment bodies.
@@ -111,6 +137,7 @@ No fix for this finding has a commit.
 
 - Monitoring runs only while OpenCode runs. Restarting stops it. Decisions and finding state are saved, and the pause still applies after a restart. Ask the agent to register the PR again to resume.
 - Only the session that registered the PR is gated. Subagents are not.
+- The widget shows the state of the project where the TUI runs. A plugin instance exists per project.
 - The GitHub adapter reads comments, reviews, and the PR head with `gh api`. Copilot's severity is read from the comment text when present. Otherwise the agent rates it.
 - The plugin never merges. A person must.
 

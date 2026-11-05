@@ -5,7 +5,9 @@
   "type": "module",
   "license": "MIT",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./rpc": "./src/rpc.ts",
+    "./tui": "./src/tui.tsx"
   },
   "files": [
     "src",
@@ -24,11 +26,35 @@
   "devDependencies": {
     "@types/bun": "^1.3.0",
     "typescript": "^5.9.3",
-    "@opencode/client": "2.2.5"
+    "@opencode/client": "2.2.5",
+    "@opencode/theme": "2.2.5",
+    "@opentui/core": "0.8.2",
+    "@opentui/solid": "0.8.2",
+    "solid-js": "^1.9.9"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/RAGessler/opencode-plugins.git",
     "directory": "packages/pr-followup"
+  },
+  "peerDependencies": {
+    "@opencode/theme": "2.2.5",
+    "@opentui/core": ">=0.8.0 <0.9.0",
+    "@opentui/solid": ">=0.8.0 <0.9.0",
+    "solid-js": "^1.9.0"
+  },
+  "peerDependenciesMeta": {
+    "@opencode/theme": {
+      "optional": true
+    },
+    "@opentui/core": {
+      "optional": true
+    },
+    "@opentui/solid": {
+      "optional": true
+    },
+    "solid-js": {
+      "optional": true
+    }
   }
 }

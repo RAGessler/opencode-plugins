@@ -41,6 +41,9 @@ export function buildReport(ledger: Ledger, ids: string[]): string {
 
 export class Watcher {
   private watches = new Map<string, Watch>()
+  private paused = false
+  lastTickAt?: number
+  lastError?: string
 
   constructor(private readonly deps: WatcherDeps) {}
 
@@ -60,7 +63,13 @@ export class Watcher {
     this.watches.delete(key)
   }
 
+  setPaused(paused: boolean) {
+    this.paused = paused
+  }
+
   async tick(): Promise<void> {
+    if (this.paused) return
+    this.lastTickAt = this.deps.now()
     for (const [key, w] of [...this.watches]) await this.poll(key, w)
   }
 
@@ -70,7 +79,9 @@ export class Watcher {
     try {
       snapshot = await this.deps.fetch(ledger.record.pr)
       w.pollFailures = 0
-    } catch {
+      this.lastError = undefined
+    } catch (error) {
+      this.lastError = error instanceof Error ? error.message.split("\n")[0] : "GitHub request failed"
       if (++w.pollFailures >= this.deps.maxFailures) await this.stop(key, w, "GitHub polling failed too many times.")
       return
     }

@@ -82,3 +82,47 @@ describe("Service", () => {
     expect(t2.watcher.watching()).toEqual([])
   })
 })
+
+describe("Service enable and status", () => {
+  test("refuses to register while off, and registers after it is on", async () => {
+    const t = setup()
+    t.service.setEnabled(false)
+    expect(t.service.isEnabled()).toBe(false)
+    expect(await t.service.run({ action: "register", pr: "o/r#1" }, "ses_1")).toContain("turned off")
+    expect(t.watcher.watching()).toEqual([])
+    t.service.setEnabled(true)
+    expect(await t.service.run({ action: "register", pr: "o/r#1" }, "ses_1")).toContain("Registered")
+  })
+  test("pauses the watcher while off", async () => {
+    let fetches = 0
+    const watcher = new Watcher({ fetch: async () => { fetches++; return { head: "h", state: "open", findings: [] } }, deliver: async () => {}, persist: async () => {}, now: () => 0, debounceMs: 0, maxFailures: 3 })
+    const service = new Service({ watcher, fetch: async () => ({ head: "h", state: "open", findings: [] }), save: async () => {}, policy: { fixLowSeverity: true } })
+    await service.run({ action: "register", pr: "o/r#1" }, "ses_1")
+    service.setEnabled(false)
+    await watcher.tick()
+    expect(fetches).toBe(0)
+    service.setEnabled(true)
+    await watcher.tick()
+    expect(fetches).toBe(1)
+  })
+  test("view omits undefined fields so it passes the RPC schema", () => {
+    const t = setup()
+    expect(Object.keys(t.service.view()).sort()).toEqual(["enabled", "pollSeconds", "prs"])
+  })
+  test("starts off when configured off", () => {
+    const watcher = new Watcher({ fetch: async () => ({ head: "", state: "open", findings: [] }), deliver: async () => {}, persist: async () => {}, now: () => 0, debounceMs: 0, maxFailures: 3 })
+    const service = new Service({ watcher, fetch: async () => ({ head: "", state: "open", findings: [] }), save: async () => {}, policy: { fixLowSeverity: true }, enabled: false })
+    expect(service.view().enabled).toBe(false)
+  })
+  test("view reports counts and open decisions, and notifies on changes", async () => {
+    let notified = 0
+    const watcher = new Watcher({ fetch: async () => ({ head: "abc1234def", state: "open", findings: [finding] }), deliver: async () => {}, persist: async () => {}, now: () => 5, debounceMs: 0, maxFailures: 3 })
+    const service = new Service({ watcher, fetch: async () => ({ head: "abc1234def", state: "open", findings: [finding] }), save: async () => {}, policy: { fixLowSeverity: true }, pollSeconds: 30, notify: () => { notified++ } })
+    await service.run({ action: "register", pr: "o/r#1" }, "ses_1")
+    expect(service.view()).toMatchObject({ enabled: true, pollSeconds: 30, prs: [{ pr: "o/r#1", head: "abc1234", watching: true, waiting: 1, decisions: [] }] })
+    await service.run({ action: "assess", pr: "o/r#1", id: "inline:1", assessment: assessment() }, "ses_1")
+    await service.run(askInput, "ses_1")
+    expect(service.view().prs[0]?.decisions).toEqual(["D-1"])
+    expect(notified).toBeGreaterThanOrEqual(3)
+  })
+})

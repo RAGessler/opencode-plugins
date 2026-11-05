@@ -38,3 +38,11 @@ describe("gate", () => {
     expect(gate({ command: "git diff", openDecisions: 1 }).effect).toBe("allow")
   })
 })
+
+describe("gate when not strict", () => {
+  test("allows force push and merge but still honors open decisions", () => {
+    expect(gate({ command: "git push -f", openDecisions: 0, strict: false }).effect).toBe("allow")
+    expect(gate({ command: "gh pr merge 1", openDecisions: 0, strict: false }).effect).toBe("allow")
+    expect(gate({ command: "git push", openDecisions: 1, strict: false }).effect).toBe("deny")
+  })
+})

@@ -15,7 +15,9 @@ After `@draft-pr` opens the draft PR and requests the Copilot review, call:
 pr_followup { action: "register", pr: "owner/repo#123" }
 ```
 
-Then end your turn. Do not sleep, poll, or run `gh pr checks` in a loop. A `[PR Followup]` message arrives when there is feedback.
+If the tool says that PR follow-up is turned off, do not try to work around it. Tell the user to run `/followup on`, and continue without it.
+
+Otherwise, end your turn. Do not sleep, poll, or run `gh pr checks` in a loop. A `[PR Followup]` message arrives when there is feedback.
 
 ## When a report arrives
 

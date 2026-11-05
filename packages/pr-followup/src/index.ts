@@ -6,6 +6,7 @@ import { Plugin, Skill } from "@opencode/plugin"
 import { gate, isCommandAction } from "./gate"
 import { createGitHub } from "./github"
 import { Ledger } from "./ledger"
+import { FollowupRpc } from "./rpc"
 import { defaultPolicy } from "./policy"
 import { Service } from "./service"
 import { prKey, type PrRecord } from "./types"
@@ -14,6 +15,7 @@ import { Watcher } from "./watcher"
 const run = promisify(execFile)
 const SKILL_URL = new URL("../skills/address-pr-feedback/SKILL.md", import.meta.url)
 const STORE_PREFIX = "pr/"
+const SETTINGS_KEY = "settings"
 
 const clamp = (value: unknown, min: number, max: number, fallback: number) =>
   typeof value === "number" && Number.isFinite(value) ? Math.min(max, Math.max(min, Math.round(value))) : fallback
@@ -88,12 +90,31 @@ export default Plugin.define({
       debounceMs,
       maxFailures: 10,
     })
-    const service = new Service({ watcher, fetch: pr => github.snapshot(pr), save, policy })
+    const settings = (await ctx.storage.get(SETTINGS_KEY)) as { enabled?: boolean } | undefined
+    const pollSeconds = pollMs / 1000
+    let emitChanged = () => {}
+    const service = new Service({
+      watcher, fetch: pr => github.snapshot(pr), save, policy, pollSeconds,
+      enabled: settings?.enabled !== false,
+      notify: () => emitChanged(),
+    })
 
     const saved = await ctx.storage.scan({ prefix: STORE_PREFIX, limit: 500 })
     service.hydrate(saved.entries.map(e => e.value as unknown as PrRecord))
 
+    const rpc = await ctx.rpc.register(FollowupRpc, {
+      status: async () => service.view(),
+      setEnabled: async input => {
+        const enabled = (input as { enabled?: unknown } | undefined)?.enabled === true
+        service.setEnabled(enabled)
+        await ctx.storage.set(SETTINGS_KEY, { enabled })
+        return service.view()
+      },
+    })
+    emitChanged = () => void rpc.events.emit("changed", {}).catch(() => {})
+
     const registrations = [
+      rpc,
       await ctx.tool.transform(editor => {
         editor.add({
           name: "pr_followup",
@@ -110,7 +131,7 @@ export default Plugin.define({
       await ctx.permission.hook("evaluate", event => {
         if (!isCommandAction(event.action) || !service.ownsPr(event.sessionID)) return
         for (const command of event.resources) {
-          const result = gate({ command, openDecisions: service.openDecisionCount(event.sessionID) })
+          const result = gate({ command, openDecisions: service.openDecisionCount(event.sessionID), strict: service.isEnabled() })
           if (result.effect === "deny") {
             event.effect = "deny"
             event.message = result.message
@@ -138,7 +159,7 @@ export default Plugin.define({
       // The tool still works without the bundled skill.
     }
 
-    const timer = setInterval(() => void watcher.tick().catch(() => {}), pollMs)
+    const timer = setInterval(() => void watcher.tick().then(() => emitChanged(), () => {}), pollMs)
     return async () => {
       clearInterval(timer)
       await Promise.all(registrations.map(r => r.dispose()))

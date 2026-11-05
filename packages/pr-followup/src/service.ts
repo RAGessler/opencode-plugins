@@ -2,6 +2,7 @@ import { Ledger, LedgerError, parseAnswer, type AskRequest } from "./ledger"
 import { parsePrRef, REPLY_MARKER } from "./github"
 import type { PolicyOptions } from "./policy"
 import { prKey, type Assessment, type PrRecord, type Severity, type Snapshot } from "./types"
+import type { PrView, StatusView } from "./view"
 import { WAKE_MARKER, type Watcher } from "./watcher"
 
 export interface ServiceDeps {
@@ -9,6 +10,10 @@ export interface ServiceDeps {
   fetch(pr: ReturnType<typeof parsePrRef>): Promise<Snapshot>
   save(ledger: Ledger): Promise<void>
   policy: PolicyOptions
+  pollSeconds?: number
+  enabled?: boolean
+  /** Called after state changes that a status view can show. */
+  notify?: () => void
 }
 
 const MAX_BODY = 4000
@@ -64,8 +69,48 @@ export function parseAsk(input: Record<string, unknown>): AskRequest {
 
 export class Service {
   private ledgers = new Map<string, Ledger>()
+  private enabled: boolean
 
-  constructor(private readonly deps: ServiceDeps) {}
+  constructor(private readonly deps: ServiceDeps) {
+    this.enabled = deps.enabled !== false
+    deps.watcher.setPaused(!this.enabled)
+  }
+
+  isEnabled(): boolean {
+    return this.enabled
+  }
+
+  setEnabled(enabled: boolean) {
+    this.enabled = enabled
+    this.deps.watcher.setPaused(!enabled)
+    this.deps.notify?.()
+  }
+
+  view(): StatusView {
+    const watching = new Set(this.deps.watcher.watching())
+    const prs: PrView[] = [...this.ledgers.values()]
+      .filter(l => l.record.state === "open")
+      .map(l => {
+        const entries = Object.values(l.record.entries)
+        const key = prKey(l.record.pr)
+        return {
+          pr: key,
+          head: l.record.head.slice(0, 7),
+          watching: watching.has(key),
+          waiting: entries.filter(e => e.status === "new" || e.status === "approved" || (e.status === "assessed" && e.verdict?.action === "fix")).length,
+          fixed: entries.filter(e => e.status === "fixed").length,
+          skipped: entries.filter(e => e.status === "skipped").length,
+          decisions: l.openDecisions().map(d => d.id),
+        }
+      })
+    return {
+      enabled: this.enabled,
+      pollSeconds: this.deps.pollSeconds ?? 60,
+      ...(this.deps.watcher.lastTickAt === undefined ? {} : { lastPollAt: this.deps.watcher.lastTickAt }),
+      ...(this.deps.watcher.lastError === undefined ? {} : { lastError: this.deps.watcher.lastError }),
+      prs,
+    }
+  }
 
   /** Load saved records for gating only. This does not start monitoring. */
   hydrate(records: PrRecord[]) {
@@ -93,6 +138,7 @@ export class Service {
       const entry = ledger.answer(answer.decisionId, answer.option)
       if (!entry) continue
       await this.deps.save(ledger).catch(() => {})
+      this.deps.notify?.()
       return `${WAKE_MARKER} The plugin recorded your answer: ${answer.decisionId} option ${answer.option}. Finding ${entry.finding.id} is now "${entry.status}". ${entry.note ?? ""}`.trim()
     }
     return undefined
@@ -105,7 +151,9 @@ export class Service {
 
   async run(input: Record<string, unknown>, sessionID: string): Promise<string> {
     try {
-      return await this.dispatch(input, sessionID)
+      const out = await this.dispatch(input, sessionID)
+      this.deps.notify?.()
+      return out
     } catch (error) {
       if (error instanceof LedgerError || error instanceof Error) return `ERROR: ${error.message}`
       throw error
@@ -116,6 +164,7 @@ export class Service {
     const action = str(input.action, "action")
     switch (action) {
       case "register": {
+        if (!this.enabled) return fail("PR follow-up is turned off. Ask the user to run /followup on. Do not register the PR.")
         const pr = parsePrRef(str(input.pr, "pr"))
         const key = prKey(pr)
         const ledger = this.ledgers.get(key) ?? Ledger.create(pr, sessionID, this.deps.policy)

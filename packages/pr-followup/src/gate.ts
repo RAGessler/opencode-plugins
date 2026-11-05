@@ -24,6 +24,8 @@ export function classifyCommand(command: string): CommandClass {
 export interface GateInput {
   command: string
   openDecisions: number
+  /** When false, only open decisions pause commits and pushes. */
+  strict?: boolean
 }
 
 export interface GateResult {
@@ -31,8 +33,10 @@ export interface GateResult {
   message?: string
 }
 
-export function gate({ command, openDecisions }: GateInput): GateResult {
-  switch (classifyCommand(command)) {
+export function gate({ command, openDecisions, strict = true }: GateInput): GateResult {
+  const kind = classifyCommand(command)
+  if (!strict && (kind === "force-push" || kind === "merge" || kind === "skip-hooks")) return { effect: "allow" }
+  switch (kind) {
     case "force-push":
       return { effect: "deny", message: "PR follow-up never force-pushes. Ask the user to do this by hand." }
     case "merge":
