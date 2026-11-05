@@ -1,4 +1,4 @@
-name: V2 plugin
+name: Plugins
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  plugin:
+  plugins:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,4 +23,4 @@ jobs:
       - run: npm ci --ignore-scripts --registry=https://registry.npmjs.org
       - run: npm run typecheck
       - run: npm test
-      - run: npm pack --dry-run
+      - run: npm pack --dry-run --workspaces

@@ -1,9 +1,11 @@
-name: Release OpenCode V2 plugin
+name: Release plugin
 
+# Each package has its own tag: costs-v<version> or pr-followup-v<version>.
 on:
   push:
     tags:
-      - "v*"
+      - "costs-v*"
+      - "pr-followup-v*"
 
 permissions:
   contents: write
@@ -21,18 +23,25 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.4.4"
-      - name: Validate release tag
+      - name: Resolve package and validate tag
+        id: pkg
         run: |
-          package_version=$(node -p "require('./package.json').version")
-          test "v${package_version}" = "${GITHUB_REF_NAME}" || {
-            echo "Release tag ${GITHUB_REF_NAME} does not match package version ${package_version}." >&2
+          case "${GITHUB_REF_NAME}" in
+            costs-v*) dir=costs; version="${GITHUB_REF_NAME#costs-v}" ;;
+            pr-followup-v*) dir=pr-followup; version="${GITHUB_REF_NAME#pr-followup-v}" ;;
+            *) echo "Unknown tag ${GITHUB_REF_NAME}." >&2; exit 1 ;;
+          esac
+          package_version=$(node -p "require('./packages/${dir}/package.json').version")
+          test "${version}" = "${package_version}" || {
+            echo "Tag ${GITHUB_REF_NAME} does not match package version ${package_version}." >&2
             exit 1
           }
+          echo "dir=packages/${dir}" >> "$GITHUB_OUTPUT"
       - run: npm ci --ignore-scripts --registry=https://registry.npmjs.org
       - run: npm run typecheck
       - run: npm test
       - name: Pack npm release
-        run: mkdir -p dist && npm pack --pack-destination dist
+        run: mkdir -p dist && npm pack --workspace "${{ steps.pkg.outputs.dir }}" --pack-destination dist
       - name: Publish to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -46,12 +55,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          release_name: ${{ github.ref_name }}
           generate_release_notes: true
-          body: |
-            OpenCode V2 TUI cost plugin. Install the npm package in the global OpenCode `cli.json` plugins array as documented in the README.
-
-            The legacy Python TUI is deprecated and OpenCode V1-only. No further Python wheel releases will be published; existing releases remain available.
           files: dist/*.tgz
           draft: false
           prerelease: false
